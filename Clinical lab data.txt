@@ -1,0 +1,1100 @@
+/*READ SAS DATAS*/
+
+libname Clinical "\\VBOXSVR\vm_shared\Datasets\clinical project with ds";
+
+
+*******************************************************;
+/
+%macro tabulation (table=,variable = , title1 =) ;
+proc tabulate data = &table;
+var &variable;
+title "&title1";
+table &variable, n mean std range/box ='Day' ;
+run;
+%mend tabulation;
+
+*******************************************************;
+%macro plotting (tble=,vrble=,ttl2=,vrblehaxis=) ;
+proc means data= &tble noprint  ;
+var &vrble;
+output out=plot_temp (drop = _type_ _freq_ ) ;
+run;
+
+proc transpose data=plot_temp out= plot_temp;
+id _STAT_;
+run;
+proc gplot data=plot_temp;
+label _name_ = Day;
+%if &vrblehaxis = 14 %then %do; 
+	plot mean*_name_/haxis=	'day0' 'day3' 'day7' 'day14' 'day30' 'day90' 'day180' 'day360' 'day720' ;
+	symbol value=dot c=red i=spline w=1 h=1; %end;
+%if &vrblehaxis = 15 %then %do;
+	plot mean*_name_/haxis=	'day0' 'day3' 'day7' 'day15' 'day30' 'day90' 'day180' 'day360' 'day720';
+	symbol value=dot c=red i=spline w=1 h=1; %end;
+title "&ttl2";
+run;
+quit;
+%mend plotting ;
+
+********************************************************;
+
+%macro compare (pr_table = , c_table=, ttl =);
+
+proc means data = &pr_table noprint;
+output out = a1(drop = _type_ _freq_);
+run;
+proc transpose data = a1 out = a2 (drop  = n min max std rename=(mean = mean_t )) ;
+id _STAT_;
+run;
+
+proc means data = &c_table noprint;
+output out = b1(drop = _type_ _freq_);
+run;
+
+proc transpose data = b1 out = b2 (drop  = n min max std rename=(mean = mean_c )) ;
+id _STAT_;
+run;
+
+data combo;
+merge a2 b2;
+run;
+
+
+proc gplot data=combo;
+label _name_ = Day;
+	plot  mean_c*_name_ /haxis=	'day0' 'day3' 'day7' 'day15' 'day30' 'day90' 'day180' 'day360';
+	symbol1 value=dot c=green i=spline w=1 h=1; 
+	plot2  mean_t*_name_;
+	symbol2 value=dot c=red i=spline w=1 h=1; 
+title "&ttl";
+run;
+quit;
+%mend compare;
+
+******************************************************;
+
+%macro ttesting (pr_table=, c_table=, ttest_output=) ;
+proc means data = &pr_table noprint;
+output out = a(drop = _type_ _freq_ );
+run;
+proc transpose data = a out = a (drop  = n min max std ) ;
+id _STAT_;
+run;
+
+proc means data = &c_table noprint;
+output out = b(drop = _type_ _freq_ );
+run;
+
+proc transpose data = b out = b (drop  = n min max std ) ;
+id _STAT_;
+run;
+
+data combo_a;
+set a ;
+_name_ = 'mean_a';
+run;
+data combo_b;
+set b ;
+_name_ = 'mean_b';
+run;
+data combo;
+set combo_a combo_b;
+run;
+proc means data=combo noprint;
+var mean;
+by _name_;
+output out=new_combo;
+run;
+proc ttest data=new_combo nobyvar;
+class _name_;
+var mean;
+ ods output Ttests=&ttest_output;
+run;
+%mend ttesting;
+
+*******************************************************;
+
+
+
+
+
+
+
+*******************************************************;
+
+ods rtf file='C:\Users\SDSP\Desktop\clinical.rtf';
+
+
+/*Table 1*/
+
+title1 c=blue f=bold  underlin=3 h=3 'Pooled Results:';
+title2 c=black f=bold  lspace=5 underlin=1 h=2 'DEMOGRAPHICS SUMMARY REPORTS:';
+title3 'Table 1: Age Analysis';
+
+proc tabulate data=clinical.Pooled;
+var rec_age don_age;
+table rec_age = 'Recipient'
+don_age = 'Donor',
+   (mean std = 'Std Dev') / box = 'Category';
+run;
+
+
+*******************************************************;
+
+/*Table 2 */
+
+data pr_table2(keep=don_rel);
+set clinical.pooled;
+if don_rel in('mother' 'father') then don_rel='Related';
+else if don_rel ='wife' then don_rel='Spousal';
+else don_rel = 'Unrelated';
+run;
+
+proc tabulate data=pr_table2;
+class don_rel ;
+title 'Table 2. Relationship of recipient with donor ';
+table don_rel =' '  All='Total',n ='Number of Records' / box = 'Category';
+run;
+
+***********************************************************;
+
+/*Table 3*/
+
+data pr_table3(keep=rec_sex don_sex);
+set clinical.pooled;
+if don_sex='femle' then don_sex = 'female';
+run;
+
+title c=black  h=2 "Table 3. Gender Analysis";
+proc tabulate data = pr_table3;
+class rec_sex don_sex;
+title 'Table 3: Gender Analysis';
+table rec_sex='Recipient'  don_sex='Donor', n / box = 'Category';
+run;
+
+***********************************************************;
+
+/* Table 4 */
+
+data pr_table4 (keep = day3 day7 day15 day30 day90 day180 day360 day720);
+set clinical.pooled;
+day3 = input(gra_func_creatine_3day, best.);
+day7 = input(gra_func_creatine_7day, best.);
+day15 = input(gra_func_creatine_15day, best.);
+day30 = input(gra_func_creatine_30day, best.);
+day90 = input(gra_func_creatine_90day, best.);
+day180 = input(gra_func_creatine_6months, best.);
+day360 = input(gra_func_creatine_1year, best.);
+day720 = input(gra_func_creatine_2year, best.);
+drop gra_func_creatine_3day gra_func_creatine_7day gra_func_creatine_15day gra_func_creatine_30day gra_func_creatine_90day gra_func_creatine_6months gra_func_creatine_1year gra_func_creatine_2year;
+run;
+
+%tabulation (table = pr_table4, 
+variable = day3 day7 day15 day30 day90 day180 day360 day720, 
+title1=Table 4: Analysis of Serum Creatinine on Different Days);
+
+%plotting (	tble = pr_table4, 
+vrble = day3 day7 day15 day30 day90 day180 day360 day720, 
+ttl2=Plot 1: Analysis of Serum Creatinine on Different Days, 
+vrblehaxis= 15);
+
+***********************************************************;
+
+/* Table 5*/
+
+data pr_table5 (keep = day0 day3 day7 day14 day30 day90 day180 day360 day720);
+set clinical.pooled;
+day0 = input(rec_hb_day,?? best6.); 
+day3 = input(rec_hb_3day,?? best6.); 
+day7 = input(rec_hb_7day,?? best6.);  
+day14  =input(rec_hb_14day,?? best6.);
+day30 =input(rec_hb_30day,?? best6.);
+day90 =input(rec_hb_90day,?? best6.); 
+day180 =input(rec_hb_6months,?? best6.);
+day360	=input(rec_hb_1year,?? best6.);
+day720 =input(rec_hb_2year,?? best6.);
+run;
+
+%tabulation (table = pr_table5, 
+variable = day0 day3 day7 day14 day30 day90 day180 day360 day720, 
+title1=Table 5: Analysis of HB on Different Days);
+
+%plotting (	tble = pr_table5, 
+vrble = day0 day3 day7 day14 day30 day90 day180 day360 day720, 
+ttl2=Plot 2: ANALYSIS OF HB IN DIFFERENT DAYS, 
+vrblehaxis= 14);
+
+
+***********************************************************;
+
+/* Table 6 */
+
+data pr_table6(keep = day0 day3 day7 day14 day30 day90 day180 day360 day720);
+set clinical.pooled;
+day0 = input(rec_platelets_0day,?? best6.);
+day3 = input(rec_platelets_3day,?? best6.);
+day7 = input(rec_platelets_7day, ?? best6.);
+day14 = input(rec_platelets_14day, ?? best6.);
+day30 = input(rec_platelets_30day, ?? best6.);
+day90 = input(rec_platelets_90day, ?? best6.);
+day180 = input(rec_platelets_6months, ?? best6.);
+day360 = input(rec_platelets_1year, ?? best6.);
+day720 = input(rec_platelets_2years, ?? best6.);
+run;
+
+%tabulation (table = pr_table6, 
+variable = day0 day3 day7 day14 day30 day90 day180 day360 day720, 
+title1=Table 6: Analysis of Platelets on Different Days);
+
+%plotting (	tble = pr_table6, 
+vrble = day0 day3 day7 day14 day30 day90 day180 day360 day720, 
+ttl2=Plot 3: ANALYSIS OF PLATELETS IN DIFFERENT DAYS, 
+vrblehaxis= 14);
+
+***********************************************************;
+
+/* TABLE 7 */
+
+data pr_table7 (keep= day0 day3 day7 day14 day30 day90 day180 day360 day720);
+set clinical.pooled;
+if length(rec_urine_r_e_0day) ne 1 then day0 = 1 ; 
+if length(rec_urine_r_e_3day) ne 1 then day3 = 1 ;
+if length(rec_urine_r_e_7day) ne 1 then  day7  = 1 ;
+if length(rec_urine_r_e_14day) ne 1 then  day14 =1 ;
+if length(rec_urine_r_e_30day) ne 1 then day30 =1 ; 
+if length(rec_urine_r_e_90day) ne 1 then day90  =1 ; 
+if length(rec_urine_r_e_6months) ne 1 then day180 =1 ; 
+if length(rec_urine_r_e_1year) ne 1 then  day360 =1 ; 
+if length(rec_urine_r_e_2year) ne 12 then day720 =1  ; 
+run;
+
+proc tabulate data=pr_table7;
+var day0 day3 day7 day14 day30 day90 day180 day360 day720;
+title 'Table 7. ANALYSIS OF URINE TEST';
+table day0 day3 day7 day14 day30 day90 day180 day360 day720,n='No of Records observed'/ box='Day';
+run;
+
+*********************************************************;
+
+/* TABLE 8 */
+
+data pr_table8(keep = day0 day3 day7 day14 day30 day90 day180 day360 day720);
+set clinical.pooled;
+day0 = input(rec_cd3_0day,?? best6.);
+day3 = input(rec_cd3_3day,?? best6.);
+day7 = input(rec_cd3_7day,?? best6.);
+day14 = input(rec_cd3_14day,?? best6.);
+day30 = input(rec_cd3_30day,?? best6.);
+day90 = input(rec_cd3_90day,?? best6.);
+day180 = input(rec_cd3_6months,?? best6.);
+day360 = input(rec_cd3_1year,?? best6.);
+day720 = input(rec_cd3_2year,?? best6.);
+run;
+
+%tabulation (table = pr_table8, 
+variable = day0 day3 day7 day14 day30 day90 day180 day360 day720, 
+title1=Table 6: Analysis of CD3 on Different Days);
+
+%plotting (	tble = pr_table8, 
+vrble = day0 day3 day7 day14 day30 day90 day180 day360 day720, 
+ttl2=Plot 3: ANALYSIS OF CD3 IN DIFFERENT DAYS, 
+vrblehaxis= 14);
+
+***********************************************************;
+
+/* TABLE 9 */
+
+data pr_table9(keep = day0 day3 day7 day14 day30 day90 day180 day360 day720);
+set clinical.pooled;
+day0 = input(rec_cd4_0day,?? best6.);
+day3 = input(rec_cd4_3day,?? best6.);
+day7 = input(rec_cd4_7day,?? best6.);
+day14 = input(rec_cd4_14day,?? best6.);
+day30 = input(rec_cd4_30day,?? best6.);
+day90 = input(rec_cd4_90day,?? best6.);
+day180 = input(rec_cd4_6months,?? best6.);
+day360 = input(rec_cd4_1year,?? best6.);
+day720 = input(rec_cd4_2year,?? best6.);
+run;
+%tabulation (table = pr_table9, 
+variable = day0 day3 day7 day14 day30 day90 day180 day360 day720, 
+title1=Table 9: ANALYSIS OF CD4 IN DIFFERENT DAYS);
+
+%plotting(tble = pr_table9, 
+vrble = day0 day3 day7 day14 day30 day90 day180 day360 day720, 
+ttl2=Plot 5: ANALYSIS OF CD4 IN DIFFERENT DAYS, 
+vrblehaxis= 14);
+
+
+***********************************************************;
+
+/* TABLE 10 */
+
+data pr_table10(keep = day0 day3 day7 day14 day30 day90 day180 day360 day720);
+set clinical.pooled;
+day0 = input(rec_cd8_0day, ?? best6.);
+day3 = input(rec_cd8_3day, ?? best6.);
+day7 = input(rec_cd8_7day, ?? best6.);
+day14 = input(rec_cd8_14day, ?? best6.);
+day30 = input(rec_cd8_30day, ?? best6.);
+day90 = input(rec_cd8_90day, ?? best6.);
+day180 = input(rec_cd8_6months, ?? best6.);
+day360 = input(rec_cd8_1year, ?? best6.);
+day720 = input(rec_cd8_2year, ?? best6.);
+run;
+
+%tabulation (table = pr_table10, 
+variable = day0 day3 day7 day14 day30 day90 day180 day360 day720, 
+title1=Table 9: ANALYSIS OF CD8 IN DIFFERENT DAYS);
+
+%plotting(tble = pr_table10, 
+vrble = day0 day3 day7 day14 day30 day90 day180 day360 day720, 
+ttl2=Plot 5: ANALYSIS OF CD8 IN DIFFERENT DAYS, 
+vrblehaxis= 14);
+
+***********************************************************;
+
+/* TABLE 11 */
+
+data pr_table11 (keep = rec_a_hla don_a_hla rec_b_hla don_b_hla rec_dr_hla don_dr_hla  hlm );
+	set clinical.pooled;
+	rec_a = int(input(translate(rec_a_hla,'.',','),?? best6.));
+	don_a =int(input(translate(don_a_hla,'.',','),?? best6.));
+	rec_b = int(input(translate(rec_b_hla,'.',','),?? best6.));
+	don_b = int(input(translate(don_b_hla,'.',','),?? best6.));
+	rec_dr =int(input(translate(rec_dr_hla,'.',','),?? best6.));
+	don_dr =int(input(translate(don_dr_hla,'.',','),?? best6.));
+
+	if 	rec_a ne . & rec_a = don_a then hlm = 1; else hlm = 0;
+	if rec_b ne . & rec_b = don_b 	then hlm = hlm +1; 
+	if rec_dr ne . & rec_dr = don_dr then hlm = hlm +1;
+run;
+
+proc print data = pr_table11 noobs;
+title 'Table 11. HLA MATCHING';
+var rec_a_hla don_a_hla rec_b_hla don_b_hla rec_dr_hla don_dr_hla  hlm	;
+run;
+
+
+***********************************************************;
+
+/* TABLE I2 */
+
+data pr_table12 (keep = day0 day3 day7 day14 day30 day90 day180 day360 day720);
+set clinical.pooled;
+day0 = input(compress(tranwrd(rec_tlc_0day,',','')),?? best8.); 
+day3 = input(compress(tranwrd(rec_tlc_3day,',','')),?? best8.); 
+day7 = input(compress(tranwrd(rec_tlc_7day,',','')),?? best8.);  
+day14  =input(compress(tranwrd(rec_tlc_14day,',','')),?? best8.);
+day30 =input(compress(tranwrd(rec_tlc_30day,',','')),?? best8.);
+day90 =input(compress(tranwrd(rec_tlc_90day,',','')),?? best8.); 
+day180 =input(compress(tranwrd(rec_tlc_6months,',','')),?? best8.);
+day360	=input(compress(tranwrd(rec_tlc_1year,',','')),?? best8.);
+day720 =input(compress(tranwrd(rec_tlc__2years,',','')),?? best8.);
+run;
+
+%tabulation (table = pr_table5, 
+variable = day0 day3 day7 day14 day30 day90 day180 day360 day720, 
+title1=Table 12: ANALYSIS OF TLC ON DIFFERENT DAYS);
+
+*********************************************************;
+
+/* TABLE 13 */
+data pr_table13 (keep = day0 day3 day7 day14 day30 day90 day180 day360 day720);
+set clinical.pooled;
+day0 = input(substr(rec_mmfdose_0day,1,3),?? best8.); 
+day3 = input(substr(rec_mmfdose_3day,1,3),?? best8.); 
+day7 = input(substr(rec_mmfdose_7day,1,3),?? best8.);  
+day14 =input(substr(rec_mmfdose_14day,1,3),?? best8.);
+day30 =input(substr(rec_mmfdose_30day,1,3),?? best8.);
+day90 =input(substr(rec_mmfdose_90day,1,3),?? best8.); 
+day180 =input(substr(rec_mmfdose_6months,1,3),?? best8.);
+day360 =input(substr(rec_mmfdose_1year,1,3),?? best8.);
+day720 =input(substr(rec_mmfdose_2year,1,3),?? best8.);
+run;
+%tabulation (table = pr_table13, 
+variable = day0 day3 day7 day14 day30 day90 day180 day360 day720, 
+title1=Table 13: ANALYSIS OF MMF DOSE IN DIFFERENT DAYS);
+
+%plotting (	tble = pr_table13, 
+vrble = day0 day3 day7 day14 day30 day90 day180 day360 day720, 
+ttl2=plot 7: ANALYSIS OF MMF DOSE IN DIFFERENT DAYS, 
+vrblehaxis= 14);
+
+***************************************;
+
+/* TABLE 14 */
+
+data pr_table14 (keep = day3 day7 day14 day30 day90 day180 day360);
+set clinical.pooled;
+day3 = input(compress(tranwrd(rec_wysolonedose_3day,'mg','')),?? best8.); 
+day7 = input(compress(tranwrd(rec_wysolonedose_7day,'mg','')),?? best8.);  
+day14  =input(compress(tranwrd(rec_wysolonedose_14day,'mg','')),?? best8.);
+day30 =input(compress(tranwrd(rec_wysolonedose_30day,'mg','')),?? best8.);
+day90 =input(compress(tranwrd(rec_wysolonedose_90day,'mg','')),?? best8.); 
+day180 =input(compress(tranwrd(rec_wysolonedose_6months,'mg','')),?? best8.);
+day360	=input(compress(tranwrd(rec_wysolonedose_1year,'mg','')),?? best8.);
+run;
+
+%tabulation (table = pr_table14, 
+variable = day3 day7 day14 day30 day90 day180 day360, 
+title1=Table 14: ANALYSIS OF WYS DOSE IN DIFFERENT DAYS);
+
+%plotting (	tble = pr_table14, 
+vrble = day3 day7 day14 day30 day90 day180 day360, 
+ttl2=plot 8: ANALYSIS OF WYS DOSE IN DIFFERENT DAYS, 
+vrblehaxis= 14);
+
+******************************************;
+
+/* TABLE 15 */
+
+data pr_table15 (keep = rec_atg_doses Avg_dose) ;
+set clinical.pooled ;
+a1 = SCAN(rec_atg_doses,1,',');
+m1 = INPUT(SCAN(a1,2,'*'),?? best6.);
+c1 = INPUT(SCAN(a1,1,'m'),?? best6.);
+if m1 = .& c1 = . then tempm1 = 0; else tempm1 = 1;
+if m1 = . then do;  m1 = 1;end; 
+if c1 = . then do; tempc1 = c1 ;c1 = 0; end; else tempc1= 1;
+
+a2 = SCAN(rec_atg_doses,2,',');
+m2 = INPUT(SCAN(a2,2,'*'),?? best6.);
+c2 = INPUT(SCAN(a2,1,'m'),?? best6.);
+if m2 = .& c2 = . then tempm2 = 0; else tempm2 = 1;
+if m2 = . then do;  m2 = 1;end; 
+if c2 = . then do; tempc2 = c2 ;	c2 = 0; end; else tempc2= 1;
+
+a3 = SCAN(rec_atg_doses,3,',');
+m3 = INPUT(SCAN(a3,2,'*'),?? best6.);
+c3 = INPUT(SCAN(a3,1,'m'),?? best6.);
+if m3 = .& c3 = . then tempm3 = 0; else tempm3 = 1;
+if m3 = . then do;  m3 = 1;end; 
+if c3 = . then do; tempc3 = c3 ;	c3 = 0; end; else tempc3 = 1;
+
+if tempc1 = . & tempc2 = . & tempc3 = . then  Avg_dose = .; 
+else  Avg_dose = (c1*m1 + c2*m2 + c3*m3)/(m1*tempm1  + m2*tempm2 + m3*tempm3);
+run;
+
+proc print data = pr_table15 noobs round;
+Title 'Table 15. ANALYSIS OF ATG DOSE TEST IN DIFFERENT DAYS';
+run;
+
+************************************************************;
+
+/* TABLE 16 */
+
+data pr_table16 (keep = rec_HCV_HIV_HBsAG HCV HIV HBS);
+set clinical.pooled;
+
+HCV = substr(rec_HCV_HIV_HBsAG,index(rec_HCV_HIV_HBsAG,'v')-1,3);
+lenga = length(compress(rec_HCV_HIV_HBsAG));
+a_rem = substr(rec_HCV_HIV_HBsAG,index(rec_HCV_HIV_HBsAG,'v')+2,lenga-3);
+
+HIV = substr(a_rem,index(a_rem,'v')-1,3);
+lengb = length(compress( a_rem));
+b_rem = substr(a_rem,index(a_rem,'v')+2,lengb-3) ;
+
+HBS = substr(b_rem,index(b_rem,'v')-1,3);
+lengc = length(compress( b_rem));
+c_rem = substr(b_rem,index(b_rem,'v')+2,lengc-3);
+run;
+
+proc tabulate data = pr_table16;
+class HCV HIV HBS;
+title 'Table 16. VIRUS EFFECT';
+table HCV HIV HBS, n / box = 'LabTestName';
+run;
+
+*******************************************************;
+
+/* Table 17 */
+data pr_table17 (keep = Viral Bacterial Fungal Others ) ;
+set clinical.pooled;
+a_viral = index(inf_comp_viral,'-') ;
+b_viral = index(inf_comp_viral,' ') ;
+if a_viral = 1 or b_viral = 1 then Viral = . ;else Viral = 1 ; 
+
+a_Bacterial = index(inf_comp_Bacterial,'-') ;
+b_Bacterial = index(inf_comp_Bacterial,' ') ;
+if a_Bacterial = 1 or b_viral = 1 then Bacterial = . ;else Bacterial = 1 ; 
+
+a_Fungal = index(inf_comp_Fungal,'-') ;
+b_Fungal = index(inf_comp_Fungal,' ') ;
+if a_Fungal = 1 or b_Fungal = 1 then Fungal = . ;else Fungal = 1 ; 
+
+a_Others = index(inf_comp_Others,'-') ;
+b_Others = index(inf_comp_Others,' ') ;
+if a_Others = 1 or b_Others = 1 then Others = . ;else Others = 1 ; 
+run;
+
+proc tabulate data=pr_table17;
+var Viral Bacterial Fungal Others;
+title 'Table 17. ADVERSE EFFECTS ON ATG DRUG';
+table Viral Bacterial Fungal Others,n='No of Records'/ box='Infection Category';
+run;
+
+********************************************;
+/* Table 18 */
+
+data pr_table18 (keep = UTI LUNG CNS OTHERS1 ) ;
+set clinical.pooled;
+a_UTI = index(inf_comp_UTI,'-') ;
+b_UTI = index(inf_comp_UTI,' ') ;
+if a_UTI = 1 or b_UTI = 1 then UTI = . ;else UTI = 1 ; 
+
+a_LUNG = index(inf_comp_LUNG,'-') ;
+b_LUNG = index(inf_comp_LUNG,' ') ;
+if a_LUNG = 1 or b_LUNG = 1 then LUNG = . ;else LUNG = 1 ; 
+
+a_CNS = index(inf_comp_CNS,'-') ;
+b_CNS = index(inf_comp_CNS,' ') ;
+if a_CNS = 1 or b_CNS = 1 then CNS = . ;else CNS = 1 ; 
+
+a_Others1 = index(inf_comp_Others1,'-') ;
+b_Others1 = index(inf_comp_Others1,' ') ;
+if a_Others1 = 1 or b_Others1 = 1 then Others = . ;else Others1 = 1 ; 
+run;
+
+proc tabulate data=pr_table18;
+var UTI LUNG CNS OTHERS1;
+title 'Table 18. ANALYSIS OF ORGANS INVOLVED';
+table UTI LUNG CNS OTHERS1,n='No of Records'/ box='Organ Infected';
+run;
+
+********************************************;
+/* Table 19 */
+
+data pr_table19 (keep = Nodm dyslipidemia dyselectrolytemia Cosmetic) ;
+set clinical.pooled;
+a_Nodm = index(non_inf_comp_Nodm,'-') ;
+b_Nodm = index(non_inf_comp_Nodm,' ') ;
+if a_Nodm = 1 or b_Nodm = 1 then Nodm = . ;else Nodm = 1 ; 
+
+a_dyslipidemia = index(non_inf_comp_dyslipidemia,'-') ;
+b_dyslipidemia = index(non_inf_comp_dyslipidemia,' ') ;
+if a_dyslipidemia = 1 or b_dyslipidemia = 1 then dyslipidemia = . ;else dyslipidemia = 1 ; 
+
+a_dyselectrolytemia = index(non_inf_comp_dyselectrolytemia,'-') ;
+b_dyselectrolytemia = index(non_inf_comp_dyselectrolytemia,' ') ;
+if a_dyselectrolytemia = 1 or b_dyselectrolytemia = 1 then dyselectrolytemia = . ;else dyselectrolytemia = 1 ; 
+
+a_Cosmetic = index(non_inf_comp_Cosmetic,'-') ;
+b_Cosmetic= index(non_inf_comp_Cosmetic,' ') ;
+if a_Cosmetic = 1 or b_Cosmetic = 1 then Cosmetic = . ;else Cosmetic = 1 ; 
+
+run;
+
+proc tabulate data=pr_table19;
+var Nodm dyslipidemia dyselectrolytemia Cosmetic;
+title 'Table 19. ANALYSIS OF INFECTION';
+table Nodm dyslipidemia dyselectrolytemia Cosmetic,n='No of Records'/ box='Category';
+run;
+
+****************************************************************************;
+
+/* Table 1 */
+title1 c=blue f=bold  underlin=3 h=3 'CONTROL GROUP RESULTS:';
+title2 c=black f=bold  lspace=5 underlin=1 h=2 'DEMOGRAPHICS SUMMARY REPORTS:';
+title3 'Table 1: Age Analysis';
+
+data c_table1 (keep = rec_age don_age) ;
+set clinical.control;
+run;
+proc tabulate data=c_table1;
+var rec_age don_age;
+table rec_age = 'Recipient'
+don_age = 'Donor',
+   (mean std = 'Std Dev') / box = 'Category';
+run;
+
+******************************************************************************;
+
+/* Table 2 */
+
+data c_table2 (keep = don_rel);
+set clinical.control;
+if don_rel in ('mother', 'father') then don_rel = 'Related';
+else don_rel = 'Unrelated';
+run;
+
+title 'Table 2: Relationship of recipient with donor ';
+proc tabulate data=c_table2;
+class don_rel;
+table don_rel ='' ALL ='TOTAL', n = 'Number of Records' / box = 'Category';
+run;
+
+***************************************************************;
+
+/* Table 3 */
+
+data c_table3 (keep = rec_sex don_sex);
+set clinical.control;
+run;
+
+title 'Table 3:  Gender Analysis';
+proc tabulate data=c_table3;
+class rec_sex don_sex;
+table rec_sex ='Recipient' don_sex = 'Donor',
+n / box = 'Category';
+run;
+
+**************************************************************************;
+
+/* Table 4 */
+
+data c_table4 (keep = day3 day7 day15 day30 day90 day180 day360 day720);
+set clinical.control;
+day3 = input(gra_func_creatine_3day, ?? best6.);
+day7 = input(gra_func_creatine_7day, ?? best6.);
+day15 = input(gra_func_creatine_15day, ?? best6.);
+day30 = input(gra_func_creatine_30day, ?? best6.);
+day90 = input(gra_func_creatine_90day, ?? best6.);
+day180 = input(gra_func_creatine_6months, ?? best6.);
+day360 = input(gra_func_creatine_1year, ?? best6.);
+day720 = input(gra_func_creatine_2year, ?? best6.);
+run;
+
+%tabulation (table = c_table4, 
+variable = day3 day7 day15 day30 day90 day180 day360 day720, 
+title1=Table 4: Analysis of Serum Creatinine on Different Days);
+
+
+%plotting (	tble = c_table4, 
+vrble = day3 day7 day15 day30 day90 day180 day360 day720, 
+ttl2=Plot 1: ANALYSIS OF SERUM IN DIFFERENT DAYS, 
+vrblehaxis= 15);
+
+**************************************************************************;
+
+/* Table 5 */
+
+data c_table5 (keep = day0 day3 day7 day14 day30 day90 day180 day360 day720);
+set clinical.control;
+day0 = input(rec_cd3_0day,?? best6.); 
+day3 = input(rec_cd3_3day,?? best6.); 
+day7 = input(rec_cd3_7day,?? best6.);  
+day14  =input(rec_cd3_14day,?? best6.);
+day30 =input(rec_cd3_30day,?? best6.);
+day90 =input(rec_cd3_90day,?? best6.); 
+day180 =input(rec_cd3_6months,?? best6.);
+day360	=input(rec_cd3_1year,?? best6.);
+day720 =input(rec_cd3_2year,?? best6.);
+run;
+%tabulation (table = c_table5, 
+variable = day0 day3 day7 day14 day30 day90 day180 day360 day720, 
+title1=Table 5: ANALYSIS OF CD3 IN DIFFERENT DAYS);
+
+%plotting (tble = c_table5, 
+vrble = day0 day3 day7 day14 day30 day90 day180 day360 day720, 
+ttl2=Plot 2: CD3 PLOT, 
+vrblehaxis= 14);
+
+****************************************************************************;
+
+/* Table 6 */
+data c_table6 (keep = day0 day3 day7 day14 day30 day90 day180 day360 day720);
+set clinical.control;
+day0 = input(rec_cd4_0day,?? best6.); 
+day3 = input(rec_cd4_3day,?? best6.); 
+day7 = input(rec_cd4_7day,?? best6.);  
+day14  =input(rec_cd4_14day,?? best6.);
+day30 =input(rec_cd4_30day,?? best6.);
+day90 =input(rec_cd4_90day,?? best6.); 
+day180 =input(rec_cd4_6months,?? best6.);
+day360	=input(rec_cd4_1year,?? best6.);
+day720 =input(rec_cd4_2year,?? best6.);
+run;
+%tabulation (	table = c_table6, 
+				varible = day0 day3 day7 day14 day30 day90 day180 day360 day720, 
+				title1=Table 6: ANALYSIS OF CD4 IN DIFFERENT DAYS);
+
+%plotting (	tble = c_table6, 
+				vrble = day0 day3 day7 day14 day30 day90 day180 day360 day720, 
+				ttl2=Plot 3: CD4 PLOT, 
+				vrblehaxis= 14);
+
+
+****************************************************************************;
+/* Table 7 */
+
+data c_table7 (keep = day0 day3 day7 day14 day30 day90 day180 day360 day720);
+set clinical.control;
+day0 = input(rec_cd8_0day,?? best6.); 
+day3 = input(rec_cd8_3day,?? best6.); 
+day7 = input(rec_cd8_7day,?? best6.);  
+day14  =input(rec_cd8_14day,?? best6.);
+day30 =input(rec_cd8_30day,?? best6.);
+day90 =input(rec_cd8_90day,?? best6.); 
+day180 =input(rec_cd8_6months,?? best6.);
+day360	=input(rec_cd8_1year,?? best6.);
+day720 =input(rec_cd8_2year,?? best6.);
+run;
+%tabulation (table = c_table7, 
+variable = day0 day3 day7 day14 day30 day90 day180 day360 day720, 
+title1=Table 7: ANALYSIS OF CD8 IN DIFFERENT DAYS);
+
+%plotting (tble = c_table7, 
+				vrble = day0 day3 day7 day14 day30 day90 day180 day360 day720, 
+				ttl2=Plot 4: CD8 PLOT, 
+				vrblehaxis= 14);
+
+
+*****************************************************************************;
+
+/* Table 8 */
+
+data c_table8 (keep = day0 day3 day7 day14 day30 day90 day180 day360 day720);
+set clinical.control;
+day0 = input(rec_hb_day,?? best6.); 
+day3 = input(rec_hb_3day,?? best6.); 
+day7 = input(rec_hb_7day,?? best6.);  
+day14  =input(rec_hb_14day,?? best6.);
+day30 =input(rec_hb_30day,?? best6.);
+day90 =input(rec_hb_90day,?? best6.); 
+day180 =input(rec_hb_6months,?? best6.);
+day360	=input(rec_hb_1year,?? best6.);
+day720 =input(rec_hb_2year,?? best6.);
+run;
+%tabulation (	table = c_table8, 
+				variable = day0 day3 day7 day14 day30 day90 day180 day360 day720, 
+				title1=Table 8: ANALYSIS OF HB IN DIFFERENT DAYS);
+
+%plotting (	tble = c_table8, 
+				vrble = day0 day3 day7 day14 day30 day90 day180 day360 day720, 
+				ttl2=Plot 5: HB PLOT, 
+				vrblehaxis= 14);
+
+
+******************************************************************************;
+
+/* Table 9 */
+
+data c_table9 (keep = day0 day3 day7 day14 day30 day90 day180 day360 day720);
+set clinical.control;
+if length(rec_urine_r_e_0day) ne 1 then day0 = 1 ; 
+if length(rec_urine_r_e_3day) ne 1 then day3 = 1 ;
+if length(rec_urine_r_e_7day) ne 1 then  day7  = 1 ;
+if length(rec_urine_r_e_14day) ne 1 then  day14 =1 ;
+if length(rec_urine_r_e_30day) ne 1 then day30 =1 ; 
+if length(rec_urine_r_e_90day) ne 1 then day90  =1 ; 
+if length(rec_urine_r_e_6months) ne 1 then day180 =1 ; 
+if length(rec_urine_r_e_1year) ne 1 then  day360 =1 ; 
+if length(rec_urine_r_e_2year) ne 12 then day720 =1  ; 
+run;
+proc tabulate data=c_table9;
+var day0 day3 day7 day14 day30 day90 day180 day360 day720;
+title 'Table 9. ANALYSIS OF URINE TEST';
+table day0 day3 day7 day14 day30 day90 day180 day360 day720,n='No of Records observed'/ box='Day';
+run;
+
+***************************************************************************;
+
+/* Table 10 */
+
+data c_table10 (keep = day0 day3 day7 day14 day30 day90 day180 day360 day720);
+set clinical.control;
+day0 = input(rec_platelets_0day,?? best6.); 
+day3 = input(rec_platelets_3day,?? best6.); 
+day7 = input(rec_platelets_7day,?? best6.);  
+day14  =input(rec_platelets_14day,?? best6.);
+day30 =input(rec_platelets_30day,?? best6.);
+day90 =input(rec_platelets_90day,?? best6.); 
+day180 =input(rec_platelets_6months,?? best6.);
+day360	=input(rec_platelets_1year,?? best6.);
+day720 =input(rec_platelets_2year,?? best6.);
+run;
+%tabulation (	tble = c_table10, 
+				vrble = day0 day3 day7 day14 day30 day90 day180 day360 day720, 
+				ttl1=Table 10: ANALYSIS OF PLT TEST ON DIFFERENT DAYS);
+
+%plotting (	tble = c_table10, 
+				vrble = day0 day3 day7 day14 day30 day90 day180 day360 day720, 
+				ttl2=Plot 6: PLT PLOT, 
+				vrblehaxis= 14);
+
+/****************************************/ 
+
+/* Table 11 */
+
+data c_table11 (keep = rec_HCV_HIV_HBsAG HCV HIV HBS)  ;
+set clinical.control;
+
+HCV = substr(rec_HCV_HIV_HBsAG,index(rec_HCV_HIV_HBsAG,'v')-1,3);
+lenga = length(compress( rec_HCV_HIV_HBsAG));
+a_rem = substr(rec_HCV_HIV_HBsAG,index(rec_HCV_HIV_HBsAG,'v')+2,lenga-3) ;
+
+HIV = substr(a_rem,index(a_rem,'v')-1,3);
+lengb = length(compress( a_rem));
+b_rem = substr(a_rem,index(a_rem,'v')+2,lengb-3) ;
+
+HBS = substr(b_rem,index(b_rem,'v')-1,3);
+lengc = length(compress( b_rem));
+c_rem = substr(b_rem,index(b_rem,'v')+2,lengc-3) ;
+run;
+
+proc tabulate data = c_table11;
+class HCV HIV HBS;
+title 'Table 11. VIRUS EFFECT';
+table HCV HIV HBS, n / box = 'LabTestName';
+run;
+
+******************************************************************;
+
+/* Table 12 */
+
+data c_table12 (keep = day0 day3 day7 day14 day30 day90 day180 day360 day720);
+set clinical.control;
+day0 = input(substr(rec_mmfdose_0day,1,3),?? best8.); 
+day3 = input(substr(rec_mmfdose_3day,1,3),?? best8.); 
+day7 = input(substr(rec_mmfdose_7day,1,3),?? best8.);  
+day14  =input(substr(rec_mmfdose_14day,1,3),?? best8.);
+day30 =input(substr(rec_mmfdose_30day,1,3),?? best8.);
+day90 =input(substr(rec_mmfdose_90day,1,3),?? best8.); 
+day180 =input(substr(rec_mmfdose_6months,1,3),?? best8.);
+day360 =input(substr(rec_mmfdose_1year,1,3),?? best8.);
+day720 =input(substr(rec_mmfdose_2year,1,3),?? best8.);
+run;
+
+%tabulation (table = c_table12, 
+variable = day0 day3 day7 day14 day30 day90 day180 day360 day720, 
+title1=Table 12: ANALYSIS OF MMF DOSE IN DIFFERENT DAYS);
+
+%plotting (tble = c_table12, 
+				vrble = day0 day3 day7 day14 day30 day90 day180 day360 day720, 
+				ttl2=Plot 7: MMF PLOT, 
+				vrblehaxis= 14);
+
+*******************************************************************************;
+
+/* Table 13 */
+
+data c_table13 (keep = day0 day3 day7 day14 day30 day90 day180 day360 day720 );
+set clinical.control;
+day3 = input(substr(rec_wysolonedose_3day,index(rec_wysolonedose_3day,'m')-2,2),?? best8.); 
+day0 = input(compress(tranwrd(rec_wysolonedose_3day,'mg','')),?? best8.); 
+day7 = input(compress(tranwrd(rec_wysolonedose_7day,'mg','')),?? best8.);  
+day14  =input(compress(tranwrd(rec_wysolonedose_14day,'mg','')),?? best8.);
+day30 =input(compress(tranwrd(rec_wysolonedose_30day,'mg','')),?? best8.);
+day90 =input(compress(tranwrd(rec_wysolonedose_90day,'mg','')),?? best8.); 
+day180 =input(compress(tranwrd(rec_wysolonedose_6months,'mg','')),?? best8.);
+day360	=input(compress(tranwrd(rec_wysolonedose_1year,'mg','')),?? best8.);
+day720 =input(compress(tranwrd(rec_wysolonedose__2year,'mg','')),?? best8.);
+run;
+
+%tabulation (table = c_table13, 
+variable = day0 day3 day7 day14 day30 day90 day180 day360 day720, 
+title1=Table 13: ANALYSIS OF WYS DOSE FOR DIFFERENT DAYS);
+
+%plotting (tble = c_table13, 
+				vrble = day0 day3 day7 day14 day30 day90 day180 day360 day720, 
+				ttl2=Plot 8: WYS PLOT, 
+				vrblehaxis= 14);
+
+*******************************************************************************;
+
+/* Table 14 */
+
+data c_table14 (keep = Viral Bacterial Fungal Others ) ;
+set clinical.pooled;
+a_viral = index(inf_comp_viral,'-') ;
+b_viral = index(inf_comp_viral,' ') ;
+if a_viral = 1 or b_viral = 1 then Viral = . ;else Viral = 1 ; 
+
+a_Bacterial = index(inf_comp_Bacterial,'-') ;
+b_Bacterial = index(inf_comp_Bacterial,' ') ;
+if a_Bacterial = 1 or b_viral = 1 then Bacterial = . ;else Viral = 1 ; 
+
+a_Fungal = index(inf_comp_Fungal,'-') ;
+b_Fungal = index(inf_comp_Fungal,' ') ;
+if a_Fungal = 1 or b_Fungal = 1 then Fungal = . ;else Fungal = 1 ; 
+
+a_Others = index(inf_comp_Others,'-') ;
+b_Others = index(inf_comp_Others,' ') ;
+if a_Others = 1 or b_Others = 1 then Others = . ;else Others = 1 ; 
+run;
+
+proc tabulate data=c_table14;
+var Viral Bacterial Fungal Others;
+title 'Table 14. ADVERSE EFFECTS ON ATG DRUG';
+table Viral Bacterial Fungal Others,n='No of Records'/ box='Infection Category';
+run;
+
+*******************************************************************************;
+
+/* Table 15 */
+
+data c_table15 (keep = UTI LUNG CNS OTHERS1 ) ;
+set clinical.pooled;
+a_UTI = index(inf_comp_UTI,'-') ;
+b_UTI = index(inf_comp_UTI,' ') ;
+if a_UTI = 1 or b_UTI = 1 then UTI = . ;else UTI = 1 ; 
+
+a_lung = index(inf_comp_lung,'-') ;
+b_lung = index(inf_comp_lung,' ') ;
+if a_lung = 1 or b_lung = 1 then LUNG = . ;else LUNG = 1 ; 
+
+a_CNS = index(inf_comp_CNS,'-') ;
+b_CNS = index(inf_comp_CNS,' ') ;
+if a_CNS = 1 or b_CNS = 1 then CNS = . ;else CNS = 1 ; 
+
+a_Others1 = index(inf_comp_Others1,'-') ;
+b_Others1 = index(inf_comp_Others1,' ') ;
+if a_Others1 = 1 or b_Others1 = 1 then OTHERS1 = . ;else OTHERS1 = 1 ; 
+run;
+
+proc tabulate data=c_table15;
+var UTI LUNG CNS OTHERS1;
+title 'Table 15. ANALYSIS OF ORGANS INVOLVED';
+table UTI LUNG CNS OTHERS1,n='No of Records'/ box='Organ Infected';
+run;
+
+*******************************************************************************;
+
+/* Table 16 */
+
+data c_table16 (keep = Nodm dyslipidemia dyselectrolytemia Cosmetic) ;
+set clinical.pooled;
+a_Nodm = index(non_inf_comp_Nodm,'-') ;
+b_Nodm = index(non_inf_comp_Nodm,' ') ;
+if a_Nodm = 1 or b_Nodm = 1 then Nodm = . ;else Nodm = 1 ; 
+
+a_dyslipidemia = index(non_inf_comp_dyslipidemia,'-') ;
+b_dyslipidemia = index(non_inf_comp_dyslipidemia,' ') ;
+if a_dyslipidemia = 1 or b_dyslipidemia = 1 then dyslipidemia = . ;else dyslipidemia = 1 ; 
+
+a_dyselectrolytemia = index(non_inf_comp_dyselectrolytemia,'-') ;
+b_dyselectrolytemia = index(non_inf_comp_dyselectrolytemia,' ') ;
+if a_dyselectrolytemia = 1 or b_dyselectrolytemia = 1 then dyselectrolytemia = . ;else dyselectrolytemia = 1 ; 
+
+a_Cosmetic = index(non_inf_comp_Cosmetic,'-') ;
+b_Cosmetic= index(non_inf_comp_Cosmetic,' ') ;
+if a_Cosmetic = 1 or b_Cosmetic = 1 then Cosmetic = . ;else Cosmetic = 1 ; 
+run;
+
+proc tabulate data=c_table16;
+var Nodm dyslipidemia dyselectrolytemia Cosmetic;
+title 'Table 16. ANALYSIS OF INFECTION';
+table Nodm dyslipidemia dyselectrolytemia Cosmetic,n='No of Records'/ box='Category';
+run;
+
+****************************************************;
+/* Table 17 */
+
+proc means data = Pr_table5 noprint;
+output out = a(drop = _type_ _freq_ );
+run;
+proc transpose data = a out = a (drop  = n min max std ) ;
+id _STAT_;
+run;
+
+proc means data = c_table5 noprint;
+output out = b(drop = _type_ _freq_ );
+run;
+
+proc transpose data = b out = b (drop  = n min max std ) ;
+id _STAT_;
+run;
+
+data combo_a;
+set a ;
+_name_ = 'mean_a';
+run;
+data combo_b;
+set b ;
+_name_ = 'mean_b';
+run;
+data combo;
+set combo_a combo_b;
+run;
+proc means data=combo noprint;
+var mean;
+by _name_;
+output out=new_combo;
+run;
+proc ttest data=new_combo nobyvar;
+class _name_;
+var mean;
+ods output ttests= testoutput;
+run;
+
+proc print data=Testoutput NOOBS;
+title 'Table 17: T-TEST FOR CD3 FINAL';
+FOOTNOTE;
+run;
+
+/* Plot 9*/
+
+title1 "COMPARISION RESULTS:";
+proc gplot data=combo;
+label _name_ = Day;
+	plot  mean_c*_name_ /haxis=	'day0' 'day3' 'day7' 'day15' 'day30' 'day90' 'day180' 'day360';
+	symbol1 value=dot c=green i=spline w=1 h=1; 
+	plot2  mean_t*_name_;
+	symbol2 value=dot c=red i=spline w=1 h=1; 
+title2 "PLOT 9: CD3 Plot";
+run;
+quit;
+
+*******************************************************;
+/* Plot 10 */
+
+/* Table 18 */
+
+%compare (pr_table = pr_table9 , c_table=c_table6, ttl ='Plot 10. CD4 FINAL ');
+%ttesting (pr_table= pr_table9, c_table=c_table6, ttest_output = C_table18);
+proc print data=C_table18 NOOBS;
+title 'Table 18: T-TEST FOR CD4 FINAL';
+FOOTNOTE;
+run;
+
+*******************************************************;
+/* Plot 11 */
+
+/* Table 19 */
+
+%compare (pr_table = pr_table10 , c_table=c_table7, ttl ='Plot 11. CD8 FINAL ');
+%ttesting (pr_table= pr_table10, c_table=c_table7, ttest_output = C_table19);
+proc print data=C_table19 NOOBS;
+title 'Table 19: T-TEST FOR CD8 FINAL';
+FOOTNOTE;
+run;
+
+*******************************************************;
+/* Plot 12 */
+
+/* Table 20 */
+
+%compare (pr_table = pr_table5  , c_table=c_table8, ttl ='Plot 12. HBTEST FINAL ');
+%ttesting (pr_table= pr_table5 , c_table=c_table8, ttest_output = C_table20);
+proc print data=C_table20 NOOBS;
+title 'Table 20: T-TEST FOR HB TEST';
+FOOTNOTE;
+run;
+
+*******************************************************;
+
+/* Plot 13 */
+
+/* Table 21 */
+
+%compare (pr_table = pr_table6  , c_table=c_table10, ttl ='Plot 13. PLT TEST FINAL ');
+%ttesting (pr_table= pr_table6 , c_table=c_table10, ttest_output = C_table21);
+proc print data=C_table21 NOOBS;
+title 'Table 21: T-TEST FOR PLT TEST';
+FOOTNOTE;
+run;
+
+********************************************************;
+
+title;
+footnote;
+
+%cd3 (cd_ = cd3_pooled , datab = clinical.pooled) ;
+%cd3 (cd_ = cd3_single , datab = clinical.single) ;
+%cd3 (cd_ = cd3_double , datab = clinical.double) ;
+%cd3 (cd_ = cd3_triple , datab = clinical.triple) ;
+title 'PLOT Cd3';
+%lastplots (cd = cd3,pooled=cd3_pooled, single =cd3_single, double=cd3_double, triple =cd3_triple);
+
+ods pdf close;
